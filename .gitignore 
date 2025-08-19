@@ -1,8 +1,3 @@
-<<<<<<< HEAD
-flutter.tar.xz
-**/.dart_tool/
-**/build/
-=======
 # Flutter/Dart/Pub related
 *.iml
 .dart_tool/
@@ -12,11 +7,6 @@ build/
 ios/.generated/
 android/.gradle/
 flutter_export_environment.sh
-<<<<<<< HEAD
->>>>>>> 53b9e86 (Initialized MahallaMarket Flutter project with minimal structure)
-=======
-flutter.tar.xz
-
 
 # Flutter/Dart
 .dart_tool/
@@ -38,4 +28,3 @@ flutter.tar.xz
 *.zip
 *.tar
 *.tar.gz
->>>>>>> 20e3f7f (Pushed entire MahallaMarket folder from correct directory)
