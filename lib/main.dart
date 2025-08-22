@@ -1,15 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'firebase_options.dart';  // Add this import
 import 'screens/login_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/post_screen.dart';
 import 'screens/chat_screen.dart';
 import 'services/auth_service.dart';
-void main() => runApp(MaterialApp(home: Scaffold(body: Center(child: Text('Hello')))));
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   try {
-    await Firebase.initializeApp();
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,  // Add this line
+    );
     print('Firebase initialized successfully');
   } catch (e) {
     print('Firebase initialization failed: $e');

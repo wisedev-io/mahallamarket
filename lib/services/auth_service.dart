@@ -1,4 +1,3 @@
-// Firebase Authentication logic
 import 'package:firebase_auth/firebase_auth.dart';
 
 class AuthService {
@@ -6,6 +5,24 @@ class AuthService {
 
   User? get currentUser => _auth.currentUser;
 
+  // Email Authentication (for testing)
+  Future<void> signInWithEmail(String email, String password) async {
+    try {
+      await _auth.signInWithEmailAndPassword(email: email, password: password);
+    } catch (e) {
+      throw Exception('Email sign-in failed: $e');
+    }
+  }
+
+  Future<void> signUpWithEmail(String email, String password) async {
+    try {
+      await _auth.createUserWithEmailAndPassword(email: email, password: password);
+    } catch (e) {
+      throw Exception('Email sign-up failed: $e');
+    }
+  }
+
+  // Phone Authentication (original)
   Future<void> signInWithPhone(String phoneNumber, Function(String) onCodeSent) async {
     try {
       await _auth.verifyPhoneNumber(

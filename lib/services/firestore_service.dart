@@ -1,5 +1,5 @@
 import 'dart:io';
-import 'dart:math'; // Added for cos and pi
+import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:mahallamarket/models/item.dart';
@@ -18,6 +18,8 @@ class FirestoreService {
     required String userId,
   }) async {
     try {
+      print('Adding item: $title, Price: $price, Location: $latitude, $longitude');
+      
       await _firestore.collection('items').add({
         'title': title,
         'price': price,
@@ -25,8 +27,12 @@ class FirestoreService {
         'latitude': latitude,
         'longitude': longitude,
         'userId': userId,
+        'createdAt': FieldValue.serverTimestamp(),
       });
+      
+      print('Item added successfully');
     } catch (e) {
+      print('Error adding item: $e');
       throw Exception('Error adding item: $e');
     }
   }
@@ -43,20 +49,36 @@ class FirestoreService {
 
   Future<List<Item>> getItemsWithinRadius(double latitude, double longitude, double radiusKm) async {
     try {
+      print('Searching for items near: $latitude, $longitude within ${radiusKm}km');
+      
       // Simple bounding box for 6-km radius (approximate)
       const double kmPerDegree = 111.0;
       final double latDelta = radiusKm / kmPerDegree;
       final double lonDelta = radiusKm / (kmPerDegree * cos(latitude * pi / 180));
 
+      print('Search bounds: lat ${latitude - latDelta} to ${latitude + latDelta}, lon ${longitude - lonDelta} to ${longitude + lonDelta}');
+
       final snapshot = await _firestore.collection('items')
           .where('latitude', isGreaterThan: latitude - latDelta)
           .where('latitude', isLessThan: latitude + latDelta)
-          .where('longitude', isGreaterThan: longitude - lonDelta)
-          .where('longitude', isLessThan: longitude + lonDelta)
           .get();
 
-      return snapshot.docs.map((doc) => Item.fromMap(doc.data(), doc.id)).toList();
+      print('Found ${snapshot.docs.length} items in initial query');
+
+      // Filter by longitude manually since Firestore doesn't support multiple range queries
+      final filteredDocs = snapshot.docs.where((doc) {
+        final itemLon = (doc.data()['longitude'] as num).toDouble();
+        return itemLon > longitude - lonDelta && itemLon < longitude + lonDelta;
+      }).toList();
+
+      print('Found ${filteredDocs.length} items after longitude filtering');
+
+      final items = filteredDocs.map((doc) => Item.fromMap(doc.data(), doc.id)).toList();
+      
+      print('Converted ${items.length} items');
+      return items;
     } catch (e) {
+      print('Error fetching items: $e');
       throw Exception('Error fetching items: $e');
     }
   }
@@ -67,7 +89,7 @@ class FirestoreService {
         'senderId': senderId,
         'receiverId': receiverId,
         'text': text,
-        'timestamp': DateTime.now().toIso8601String(),
+        'timestamp': FieldValue.serverTimestamp(),
       });
     } catch (e) {
       throw Exception('Error sending message: $e');

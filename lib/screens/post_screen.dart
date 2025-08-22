@@ -28,7 +28,20 @@ class _PostScreenState extends State<PostScreen> {
     });
 
     try {
-      Position position = await Geolocator.getCurrentPosition();
+      // Use same hardcoded location as HomeScreen for testing consistency
+      Position position = Position(
+        latitude: 37.7749,  // San Francisco coordinates
+        longitude: -122.4194,
+        timestamp: DateTime.now(),
+        accuracy: 1.0,
+        altitude: 0.0,
+        heading: 0.0,
+        speed: 0.0,
+        speedAccuracy: 0.0,
+        altitudeAccuracy: 0.0,
+        headingAccuracy: 0.0,
+      );
+
       await _firestoreService.addItem(
         title: _titleController.text,
         price: double.parse(_priceController.text),
@@ -37,6 +50,15 @@ class _PostScreenState extends State<PostScreen> {
         longitude: position.longitude,
         userId: _authService.currentUser!.uid,
       );
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Item posted successfully!'))
+      );
+      
+      // Clear form
+      _titleController.clear();
+      _priceController.clear();
+      
       Navigator.pop(context);
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error posting item: $e')));
@@ -57,25 +79,57 @@ class _PostScreenState extends State<PostScreen> {
           children: [
             TextField(
               controller: _titleController,
-              decoration: const InputDecoration(labelText: 'Title'),
+              decoration: const InputDecoration(
+                labelText: 'Title',
+                border: OutlineInputBorder(),
+                hintText: 'e.g., iPhone 12, Bicycle, etc.'
+              ),
             ),
+            const SizedBox(height: 16),
             TextField(
               controller: _priceController,
-              decoration: const InputDecoration(labelText: 'Price'),
+              decoration: const InputDecoration(
+                labelText: 'Price (\$)',
+                border: OutlineInputBorder(),
+                hintText: 'e.g., 100.00'
+              ),
               keyboardType: TextInputType.number,
             ),
             const SizedBox(height: 16),
-            const Text('Image upload not supported in web mode'),
-            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade100,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Text(
+                '📍 Location: San Francisco (Test Mode)\n📷 Image upload not supported in web mode',
+                style: TextStyle(color: Colors.grey),
+              ),
+            ),
+            const SizedBox(height: 24),
             _isLoading
                 ? const CircularProgressIndicator()
-                : ElevatedButton(
-                    onPressed: _postItem,
-                    child: const Text('Post Item'),
+                : SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: _postItem,
+                      style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                      ),
+                      child: const Text('Post Item', style: TextStyle(fontSize: 16)),
+                    ),
                   ),
           ],
         ),
       ),
     );
+  }
+
+  @override
+  void dispose() {
+    _titleController.dispose();
+    _priceController.dispose();
+    super.dispose();
   }
 }
