@@ -1,22 +1,24 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'firebase_options.dart';  // Add this import
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'firebase_options.dart';
 import 'screens/login_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/post_screen.dart';
 import 'screens/chat_screen.dart';
 import 'services/auth_service.dart';
+import 'services/notification_service.dart';
+
+@pragma('vm:entry-point')
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+}
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  try {
-    await Firebase.initializeApp(
-      options: DefaultFirebaseOptions.currentPlatform,  // Add this line
-    );
-    print('Firebase initialized successfully');
-  } catch (e) {
-    print('Firebase initialization failed: $e');
-  }
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+  await NotificationService().init();
   runApp(const MahallaMarketApp());
 }
 
@@ -27,22 +29,11 @@ class MahallaMarketApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'MahallaMarket',
-      theme: ThemeData(
-        primarySwatch: Colors.orange,
-        useMaterial3: true,
-      ),
-      home: Builder(
-        builder: (context) {
-          try {
-            final user = AuthService().currentUser;
-            print('Current user: ${user?.uid ?? 'None'}');
-            return user != null ? const HomeScreen() : const LoginScreen();
-          } catch (e) {
-            print('Error checking user: $e');
-            return const LoginScreen();
-          }
-        },
-      ),
+      theme: ThemeData(primarySwatch: Colors.orange, useMaterial3: true),
+      home: Builder(builder: (context) {
+        final user = AuthService().currentUser;
+        return user != null ? const HomeScreen() : const LoginScreen();
+      }),
       routes: {
         '/login': (context) => const LoginScreen(),
         '/home': (context) => const HomeScreen(),

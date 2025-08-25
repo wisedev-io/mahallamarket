@@ -1,11 +1,10 @@
-// Widget for displaying an item
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:mahallamarket/models/item.dart';
 
 class ItemCard extends StatelessWidget {
   final Item item;
   final VoidCallback onTap;
-
   const ItemCard({super.key, required this.item, required this.onTap});
 
   @override
@@ -14,10 +13,15 @@ class ItemCard extends StatelessWidget {
       margin: const EdgeInsets.all(8.0),
       child: ListTile(
         leading: item.imageUrl != null
-            ? Image.network(item.imageUrl!, width: 50, height: 50, fit: BoxFit.cover)
-            : const Icon(Icons.image),
-        title: Text(item.title),
-        subtitle: Text('\$${item.price.toStringAsFixed(2)}'),
+            ? ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: CachedNetworkImage(
+                  imageUrl: item.imageUrl!, width: 56, height: 56, fit: BoxFit.cover,
+                ),
+              )
+            : const Icon(Icons.image, size: 40),
+        title: Text(item.title, maxLines: 1, overflow: TextOverflow.ellipsis),
+        subtitle: Text('\$${item.price.toStringAsFixed(2)} • ${item.createdAt.toLocal()}'),
         onTap: onTap,
       ),
     );

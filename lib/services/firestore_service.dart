@@ -1,14 +1,13 @@
-import 'dart:io';
-import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_storage/firebase_storage.dart';
+import 'package:geoflutterfire2/geoflutterfire2.dart';
 import 'package:mahallamarket/models/item.dart';
 import 'package:mahallamarket/models/message.dart';
 
 class FirestoreService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  final FirebaseStorage _storage = FirebaseStorage.instance;
+  final geo = GeoFlutterFire();
 
+  // ---------- Items ----------
   Future<void> addItem({
     required String title,
     required double price,
@@ -17,92 +16,94 @@ class FirestoreService {
     required double longitude,
     required String userId,
   }) async {
-    try {
-      print('Adding item: $title, Price: $price, Location: $latitude, $longitude');
-      
-      await _firestore.collection('items').add({
-        'title': title,
-        'price': price,
-        'imageUrl': imageUrl,
-        'latitude': latitude,
-        'longitude': longitude,
-        'userId': userId,
-        'createdAt': FieldValue.serverTimestamp(),
-      });
-      
-      print('Item added successfully');
-    } catch (e) {
-      print('Error adding item: $e');
-      throw Exception('Error adding item: $e');
-    }
+    final point = geo.point(latitude: latitude, longitude: longitude);
+    await _firestore.collection('items').add({
+      'title': title,
+      'price': price,
+      'imageUrl': imageUrl,
+      'userId': userId,
+      'position': point.data,
+      'createdAt': FieldValue.serverTimestamp(),
+    });
   }
 
-  Future<String?> uploadImage(File image) async {
-    try {
-      final ref = _storage.ref().child('items/${DateTime.now().toIso8601String()}');
-      await ref.putFile(image);
-      return await ref.getDownloadURL();
-    } catch (e) {
-      throw Exception('Error uploading image: $e');
-    }
+  Stream<List<Item>> itemsNear({
+    required double latitude,
+    required double longitude,
+    double radiusKm = 6,
+  }) {
+    final center = geo.point(latitude: latitude, longitude: longitude);
+    final col = _firestore.collection('items');
+    return geo
+        .collection(collectionRef: col)
+        .within(center: center, radius: radiusKm, field: 'position', strictMode: true)
+        .map((docs) => docs.map((snap) => Item.fromDoc(snap)).toList());
   }
 
-  Future<List<Item>> getItemsWithinRadius(double latitude, double longitude, double radiusKm) async {
-    try {
-      print('Searching for items near: $latitude, $longitude within ${radiusKm}km');
-      
-      // Simple bounding box for 6-km radius (approximate)
-      const double kmPerDegree = 111.0;
-      final double latDelta = radiusKm / kmPerDegree;
-      final double lonDelta = radiusKm / (kmPerDegree * cos(latitude * pi / 180));
-
-      print('Search bounds: lat ${latitude - latDelta} to ${latitude + latDelta}, lon ${longitude - lonDelta} to ${longitude + lonDelta}');
-
-      final snapshot = await _firestore.collection('items')
-          .where('latitude', isGreaterThan: latitude - latDelta)
-          .where('latitude', isLessThan: latitude + latDelta)
-          .get();
-
-      print('Found ${snapshot.docs.length} items in initial query');
-
-      // Filter by longitude manually since Firestore doesn't support multiple range queries
-      final filteredDocs = snapshot.docs.where((doc) {
-        final itemLon = (doc.data()['longitude'] as num).toDouble();
-        return itemLon > longitude - lonDelta && itemLon < longitude + lonDelta;
-      }).toList();
-
-      print('Found ${filteredDocs.length} items after longitude filtering');
-
-      final items = filteredDocs.map((doc) => Item.fromMap(doc.data(), doc.id)).toList();
-      
-      print('Converted ${items.length} items');
-      return items;
-    } catch (e) {
-      print('Error fetching items: $e');
-      throw Exception('Error fetching items: $e');
-    }
+  Stream<List<Item>> myItems(String uid) {
+    return _firestore
+        .collection('items')
+        .where('userId', isEqualTo: uid)
+        .orderBy('createdAt', descending: true)
+        .snapshots()
+        .map((s) => s.docs.map((d) => Item.fromDoc(d)).toList());
   }
 
-  Future<void> sendMessage(String senderId, String receiverId, String text) async {
-    try {
-      await _firestore.collection('messages').add({
+  // ---------- Chat ----------
+  String conversationIdFor(String a, String b) {
+    final ids = [a, b]..sort();
+    return '${ids[0]}_${ids[1]}';
+  }
+
+  Future<void> ensureConversation(String uid1, String uid2) async {
+    final cid = conversationIdFor(uid1, uid2);
+    final ref = _firestore.collection('conversations').doc(cid);
+    await ref.set({
+      'participants': [uid1, uid2],
+      'lastMessage': FieldValue.delete(),
+      'lastTs': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+  }
+
+  Future<void> sendMessage({
+    required String senderId,
+    required String receiverId,
+    required String text,
+  }) async {
+    final cid = conversationIdFor(senderId, receiverId);
+    final convoRef = _firestore.collection('conversations').doc(cid);
+    await ensureConversation(senderId, receiverId);
+    final msgRef = convoRef.collection('messages').doc();
+    await _firestore.runTransaction((tx) async {
+      tx.set(msgRef, {
         'senderId': senderId,
         'receiverId': receiverId,
         'text': text,
-        'timestamp': FieldValue.serverTimestamp(),
+        'ts': FieldValue.serverTimestamp(),
       });
-    } catch (e) {
-      throw Exception('Error sending message: $e');
-    }
+      tx.set(convoRef, {
+        'lastMessage': text,
+        'lastTs': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+    });
   }
 
-  Stream<List<Message>> getMessages(String userId1, String userId2) {
+  Stream<List<Message>> streamMessages(String uid1, String uid2, {int limit = 50}) {
+    final cid = conversationIdFor(uid1, uid2);
     return _firestore
+        .collection('conversations').doc(cid)
         .collection('messages')
-        .where('senderId', whereIn: [userId1, userId2])
-        .where('receiverId', whereIn: [userId1, userId2])
-        .orderBy('timestamp')
+        .orderBy('ts', descending: true)
+        .limit(limit)
         .snapshots()
-        .map((snapshot) => snapshot.docs.map((doc) => Message.fromMap(doc.data(), doc.id)).toList());
+        .map((s) => s.docs.map((d) => Message.fromDoc(d)).toList());
+  }
+
+  Stream<QuerySnapshot<Map<String, dynamic>>> streamConversations(String uid) {
+    return _firestore
+        .collection('conversations')
+        .where('participants', arrayContains: uid)
+        .orderBy('lastTs', descending: true)
+        .snapshots();
   }
 }

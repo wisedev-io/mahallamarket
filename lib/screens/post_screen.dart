@@ -1,135 +1,94 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:mahallamarket/services/firestore_service.dart';
 import 'package:mahallamarket/services/auth_service.dart';
+import 'package:mahallamarket/services/storage_service.dart';
 
 class PostScreen extends StatefulWidget {
   const PostScreen({super.key});
-
   @override
-  _PostScreenState createState() => _PostScreenState();
+  State<PostScreen> createState() => _PostScreenState();
 }
 
 class _PostScreenState extends State<PostScreen> {
-  final FirestoreService _firestoreService = FirestoreService();
-  final AuthService _authService = AuthService();
-  final TextEditingController _titleController = TextEditingController();
-  final TextEditingController _priceController = TextEditingController();
-  bool _isLoading = false;
+  final _fs = FirestoreService();
+  final _auth = AuthService();
+  final _storage = StorageService();
+  final _title = TextEditingController();
+  final _price = TextEditingController();
+  File? _image;
+  bool _saving = false;
 
-  Future<void> _postItem() async {
-    if (_titleController.text.isEmpty || _priceController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Fill all fields')));
+  Future<void> _pickImage() async {
+    final picker = ImagePicker();
+    final x = await picker.pickImage(source: ImageSource.gallery, imageQuality: 85);
+    if (x != null) setState(() => _image = File(x.path));
+  }
+
+  Future<void> _submit() async {
+    final user = _auth.currentUser;
+    if (user == null) return;
+    final title = _title.text.trim();
+    final price = double.tryParse(_price.text.trim()) ?? 0;
+    if (title.isEmpty || price <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Title and price required')));
       return;
     }
-
-    setState(() {
-      _isLoading = true;
-    });
-
+    setState(() => _saving = true);
     try {
-      // Use same hardcoded location as HomeScreen for testing consistency
-      Position position = Position(
-        latitude: 37.7749,  // San Francisco coordinates
-        longitude: -122.4194,
-        timestamp: DateTime.now(),
-        accuracy: 1.0,
-        altitude: 0.0,
-        heading: 0.0,
-        speed: 0.0,
-        speedAccuracy: 0.0,
-        altitudeAccuracy: 0.0,
-        headingAccuracy: 0.0,
+      final pos = await Geolocator.getCurrentPosition();
+      String? url;
+      if (_image != null) {
+        url = await _storage.uploadItemImage(uid: user.uid, file: _image!);
+      }
+      await _fs.addItem(
+        title: title,
+        price: price,
+        imageUrl: url,
+        latitude: pos.latitude,
+        longitude: pos.longitude,
+        userId: user.uid,
       );
-
-      await _firestoreService.addItem(
-        title: _titleController.text,
-        price: double.parse(_priceController.text),
-        imageUrl: null, // Image upload skipped for web testing
-        latitude: position.latitude,
-        longitude: position.longitude,
-        userId: _authService.currentUser!.uid,
-      );
-      
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Item posted successfully!'))
-      );
-      
-      // Clear form
-      _titleController.clear();
-      _priceController.clear();
-      
-      Navigator.pop(context);
+      if (mounted) Navigator.pop(context);
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error posting item: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
     } finally {
-      setState(() {
-        _isLoading = false;
-      });
+      if (mounted) setState(() => _saving = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Post Item')),
+      appBar: AppBar(title: const Text('Post an item')),
       body: Padding(
-        padding: const EdgeInsets.all(16.0),
+        padding: const EdgeInsets.all(16),
         child: Column(
           children: [
-            TextField(
-              controller: _titleController,
-              decoration: const InputDecoration(
-                labelText: 'Title',
-                border: OutlineInputBorder(),
-                hintText: 'e.g., iPhone 12, Bicycle, etc.'
-              ),
+            TextField(controller: _title, decoration: const InputDecoration(labelText: 'Title')),
+            const SizedBox(height: 8),
+            TextField(controller: _price, decoration: const InputDecoration(labelText: 'Price'), keyboardType: TextInputType.number),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                ElevatedButton.icon(onPressed: _pickImage, icon: const Icon(Icons.image), label: const Text('Add image')),
+                const SizedBox(width: 12),
+                if (_image != null) Text(_image!.path.split('/').last),
+              ],
             ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: _priceController,
-              decoration: const InputDecoration(
-                labelText: 'Price (\$)',
-                border: OutlineInputBorder(),
-                hintText: 'e.g., 100.00'
+            const Spacer(),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: _saving ? null : _submit,
+                child: _saving ? const CircularProgressIndicator() : const Text('Publish'),
               ),
-              keyboardType: TextInputType.number,
-            ),
-            const SizedBox(height: 16),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.grey.shade100,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: const Text(
-                '📍 Location: San Francisco (Test Mode)\n📷 Image upload not supported in web mode',
-                style: TextStyle(color: Colors.grey),
-              ),
-            ),
-            const SizedBox(height: 24),
-            _isLoading
-                ? const CircularProgressIndicator()
-                : SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      onPressed: _postItem,
-                      style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                      ),
-                      child: const Text('Post Item', style: TextStyle(fontSize: 16)),
-                    ),
-                  ),
+            )
           ],
         ),
       ),
     );
-  }
-
-  @override
-  void dispose() {
-    _titleController.dispose();
-    _priceController.dispose();
-    super.dispose();
   }
 }

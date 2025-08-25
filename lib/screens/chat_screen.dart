@@ -1,75 +1,89 @@
 import 'package:flutter/material.dart';
-import 'package:mahallamarket/models/message.dart';
-import 'package:mahallamarket/services/firestore_service.dart';
 import 'package:mahallamarket/services/auth_service.dart';
+import 'package:mahallamarket/services/firestore_service.dart';
+import 'package:mahallamarket/models/message.dart';
 
 class ChatScreen extends StatefulWidget {
-  const ChatScreen({super.key});
+  final String? peerId; // pass via Navigator args
+  final String? peerName;
+  const ChatScreen({super.key, this.peerId, this.peerName});
 
   @override
-  _ChatScreenState createState() => _ChatScreenState();
+  State<ChatScreen> createState() => _ChatScreenState();
 }
 
 class _ChatScreenState extends State<ChatScreen> {
-  final FirestoreService _firestoreService = FirestoreService();
-  final AuthService _authService = AuthService();
-  final TextEditingController _messageController = TextEditingController();
-  final String _otherUserId = 'dummy_user'; // Replace with actual user ID in production
+  final _auth = AuthService();
+  final _fs = FirestoreService();
+  final _ctrl = TextEditingController();
 
   @override
   Widget build(BuildContext context) {
+    final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+    final peerId = widget.peerId ?? args?['peerId'] as String?;
+    final peerName = widget.peerName ?? args?['peerName'] as String? ?? 'Chat';
+
+    final me = _auth.currentUser;
+    if (me == null || peerId == null) {
+      return Scaffold(appBar: AppBar(title: const Text('Chat')), body: const Center(child: Text('Missing peer')));
+    }
+
+    final stream = _fs.streamMessages(me.uid, peerId);
+
     return Scaffold(
-      appBar: AppBar(title: const Text('Chat')),
+      appBar: AppBar(title: Text(peerName)),
       body: Column(
         children: [
           Expanded(
             child: StreamBuilder<List<Message>>(
-              stream: _firestoreService.getMessages(_authService.currentUser!.uid, _otherUserId),
-              builder: (context, snapshot) {
-                if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
-                final messages = snapshot.data!;
+              stream: stream,
+              builder: (context, snap) {
+                final msgs = snap.data ?? [];
+                if (msgs.isEmpty) return const Center(child: Text('Say hello!'));
                 return ListView.builder(
-                  itemCount: messages.length,
-                  itemBuilder: (context, index) {
-                    final message = messages[index];
-                    return ListTile(
-                      title: Text(message.text),
-                      subtitle: Text(message.senderId == _authService.currentUser!.uid ? 'You' : 'Other'),
+                  reverse: true,
+                  itemCount: msgs.length,
+                  itemBuilder: (context, i) {
+                    final m = msgs[i];
+                    final isMe = m.senderId == me.uid;
+                    return Align(
+                      alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
+                      child: Container(
+                        margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: isMe ? Colors.orange.shade100 : Colors.grey.shade200,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(m.text),
+                      ),
                     );
                   },
                 );
               },
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.all(8.0),
+          SafeArea(
             child: Row(
               children: [
                 Expanded(
                   child: TextField(
-                    controller: _messageController,
-                    decoration: const InputDecoration(labelText: 'Message'),
+                    controller: _ctrl,
+                    decoration: const InputDecoration(hintText: 'Message...'),
                   ),
                 ),
                 IconButton(
                   icon: const Icon(Icons.send),
                   onPressed: () async {
-                    if (_messageController.text.isEmpty) return;
-                    try {
-                      await _firestoreService.sendMessage(
-                        _authService.currentUser!.uid,
-                        _otherUserId,
-                        _messageController.text,
-                      );
-                      _messageController.clear();
-                    } catch (e) {
-                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
-                    }
+                    final text = _ctrl.text.trim();
+                    if (text.isEmpty) return;
+                    _ctrl.clear();
+                    await _fs.sendMessage(senderId: me.uid, receiverId: peerId, text: text);
                   },
-                ),
+                )
               ],
             ),
-          ),
+          )
         ],
       ),
     );
