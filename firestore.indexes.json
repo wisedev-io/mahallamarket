@@ -1,27 +1,4 @@
 {
-  "indexes": [
-    {
-      "collectionGroup": "messages",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "ts", "order": "DESCENDING" }
-      ]
-    },
-    {
-      "collectionId": "conversations",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "lastTs", "order": "DESCENDING" }
-      ]
-    },
-    {
-      "collectionId": "items",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "position.geohash", "order": "ASCENDING" },
-        { "fieldPath": "createdAt", "order": "DESCENDING" }
-      ]
-    }
-  ],
+  "indexes": [],
   "fieldOverrides": []
 }

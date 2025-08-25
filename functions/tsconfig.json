@@ -6,7 +6,9 @@
     "outDir": "lib",
     "esModuleInterop": true,
     "moduleResolution": "NodeNext",
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "strict": true
   },
   "include": ["src/**/*"]
 }

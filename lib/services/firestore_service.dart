@@ -1,11 +1,10 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:geoflutterfire2/geoflutterfire2.dart';
+import 'package:geoflutterfire_plus/geoflutterfire_plus.dart';
 import 'package:mahallamarket/models/item.dart';
 import 'package:mahallamarket/models/message.dart';
 
 class FirestoreService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  final geo = GeoFlutterFire();
 
   // ---------- Items ----------
   Future<void> addItem({
@@ -16,27 +15,36 @@ class FirestoreService {
     required double longitude,
     required String userId,
   }) async {
-    final point = geo.point(latitude: latitude, longitude: longitude);
+    // geoflutterfire_plus uses GeoFirePoint(GeoPoint(...)) then .data for {geohash, geopoint}
+    final geo = GeoFirePoint(GeoPoint(latitude, longitude));
     await _firestore.collection('items').add({
       'title': title,
       'price': price,
       'imageUrl': imageUrl,
       'userId': userId,
-      'position': point.data,
+      'position': geo.data,
       'createdAt': FieldValue.serverTimestamp(),
     });
   }
 
+  /// Stream items within a radius in KM around [latitude, longitude]
   Stream<List<Item>> itemsNear({
     required double latitude,
     required double longitude,
     double radiusKm = 6,
   }) {
-    final center = geo.point(latitude: latitude, longitude: longitude);
     final col = _firestore.collection('items');
-    return geo
-        .collection(collectionRef: col)
-        .within(center: center, radius: radiusKm, field: 'position', strictMode: true)
+
+    // In our schema, the geopoint lives at data['position']['geopoint']
+    return GeoCollectionReference(col)
+        .subscribeWithin(
+          center: GeoFirePoint(GeoPoint(latitude, longitude)),
+          radiusInKm: radiusKm,
+          field: 'position',
+          geopointFrom: (data) =>
+              (data['position'] as Map<String, dynamic>)['geopoint'] as GeoPoint,
+          strictMode: true,
+        )
         .map((docs) => docs.map((snap) => Item.fromDoc(snap)).toList());
   }
 

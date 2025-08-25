@@ -1,39 +1,19 @@
 rules_version = '2';
+
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    function isSignedIn() { return request.auth != null; }
-    function isOwner(uid) { return isSignedIn() && request.auth.uid == uid; }
-    function nowTs() { return request.time; }
-
-    // Users
-    match /users/{uid} {
-      allow read: if isSignedIn();
-      allow create: if isOwner(uid);
-      allow update, delete: if isOwner(uid);
-    }
-
-    // Listings
-    match /items/{itemId} {
-      allow read: if true;
-      allow create: if isOwner(request.resource.data.userId)
-        && request.resource.data.keys().hasAll(['title','price','userId','position','createdAt'])
-        && request.resource.data.position.keys().hasAll(['geohash','geopoint']);
-      allow update, delete: if isOwner(resource.data.userId);
-    }
-
-    // Conversations and messages
-    match /conversations/{cid} {
-      allow read, update, delete: if isSignedIn() && (request.auth.uid in resource.data.participants);
-      allow create: if isSignedIn() && (request.resource.data.participants.hasAny([request.auth.uid]));
-
-      match /messages/{mid} {
-        allow read: if isSignedIn() && (request.auth.uid in resource.data.participants) &&
-                     (get(/databases/$(database)/documents/conversations/$(cid)).data.participants.hasAny([request.auth.uid]));
-        allow create: if isSignedIn() && request.resource.data.senderId == request.auth.uid &&
-                      (get(/databases/$(database)/documents/conversations/$(cid)).data.participants.hasAny([request.auth.uid]));
-        allow update, delete: if false; // immutable
-      }
+    // This rule allows anyone with your Firestore database reference to view, edit,
+    // and delete all data in your Firestore database. It is useful for getting
+    // started, but it is configured to expire after 30 days because it
+    // leaves your app open to attackers. At that time, all client
+    // requests to your Firestore database will be denied.
+    //
+    // Make sure to write security rules for your app before that time, or else
+    // all client requests to your Firestore database will be denied until you Update
+    // your rules
+    match /{document=**} {
+      allow read, write: if request.time < timestamp.date(2025, 9, 17);
     }
   }
 }
