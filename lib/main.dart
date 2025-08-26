@@ -1,53 +1,49 @@
-import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:firebase_core/firebase_core.dart';
-import 'firebase_options.dart';
-import 'screens/login_screen.dart';
+import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'screens/home_screen.dart';
-import 'screens/post_screen.dart';
-import 'screens/chat_screen.dart';
-import 'services/auth_service.dart';
-import 'services/notification_service.dart';
-import 'package:firebase_messaging/firebase_messaging.dart';
+import 'screens/chat_list_screen.dart';
+import 'screens/profile_hub_screen.dart';
+// import 'firebase_options.dart'; // uncomment + pass options if you have this file
 
-@pragma('vm:entry-point')
-Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-  // Background handler only for mobile
-  if (kIsWeb) return;
-  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-}
-
-void main() async {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-
-  // Only set up FCM + local notifications on mobile (not web)
-  if (!kIsWeb) {
-    FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
-    await NotificationService().init();
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
+  if (FirebaseAuth.instance.currentUser == null) {
+    await FirebaseAuth.instance.signInAnonymously();
   }
-
-  runApp(const MahallaMarketApp());
+  runApp(const App());
 }
 
-class MahallaMarketApp extends StatelessWidget {
-  const MahallaMarketApp({super.key});
+class App extends StatefulWidget {
+  const App({super.key});
+  @override
+  State<App> createState() => _AppState();
+}
+
+class _AppState extends State<App> {
+  int _tab = 0;
+  final _pages = const [HomeScreen(), ChatListScreen(), ProfileHubScreen()];
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'MahallaMarket',
-      theme: ThemeData(primarySwatch: Colors.orange, useMaterial3: true),
-      home: Builder(builder: (context) {
-        final user = AuthService().currentUser;
-        return user != null ? const HomeScreen() : const LoginScreen();
-      }),
-      routes: {
-        '/login': (context) => const LoginScreen(),
-        '/home': (context) => const HomeScreen(),
-        '/post': (context) => const PostScreen(),
-        '/chat': (context) => const ChatScreen(),
-      },
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData(useMaterial3: true, colorSchemeSeed: Colors.orange),
+      home: Scaffold(
+        body: _pages[_tab],
+        bottomNavigationBar: NavigationBar(
+          selectedIndex: _tab,
+          onDestinationSelected: (i) => setState(() => _tab = i),
+          destinations: const [
+            NavigationDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home), label: 'Home'),
+            NavigationDestination(icon: Icon(Icons.chat_bubble_outline), selectedIcon: Icon(Icons.chat_bubble), label: 'Chats'),
+            NavigationDestination(icon: Icon(Icons.person_outline), selectedIcon: Icon(Icons.person), label: 'My'),
+          ],
+        ),
+      ),
     );
   }
 }

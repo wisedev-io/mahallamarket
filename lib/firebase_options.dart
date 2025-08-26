@@ -20,4 +20,5 @@ class DefaultFirebaseOptions {
     storageBucket: 'mahallamarket-61195.firebasestorage.app',
     measurementId: 'G-CC6WMSDDEQ',
   );
+
 }
