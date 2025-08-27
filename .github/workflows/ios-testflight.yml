@@ -1,0 +1,22 @@
+name: ios-testflight
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["release/ios"]
+
+jobs:
+  build-ios:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+      - run: flutter pub get
+      - run: flutter build ios --release --no-codesign
+      # Signing & upload need App Store Connect API key + certs (add later)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ios-build
+          path: build/ios/iphoneos/*.app

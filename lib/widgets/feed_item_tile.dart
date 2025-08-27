@@ -67,7 +67,6 @@ class FeedItemTile extends StatelessWidget {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(content: Text(nowFav ? 'Added to favorites' : 'Removed from favorites')),
                     );
-                    // rely on parent List rebuilds; OK for dev
                   },
                 ),
                 Row(
