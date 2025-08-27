@@ -1,10 +1,12 @@
 import 'package:firebase_core/firebase_core.dart';
+import 'dart:developer' as dev;
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'screens/home_screen.dart';
 import 'screens/chat_list_screen.dart';
 import 'screens/profile_hub_screen.dart';
-// import 'firebase_options.dart'; // uncomment + pass options if you have this file
+import 'firebase_options.dart'; // uncomment + pass options if you have this file
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
