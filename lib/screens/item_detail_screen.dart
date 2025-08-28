@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:mahallamarket/services/mock_data.dart';
-import 'package:mahallamarket/services/mock_state.dart';
-import 'verification_screen.dart';
+import 'package:mahallamarket/domain/models/item.dart';
+import 'package:mahallamarket/di/repositories.dart';
+import 'package:mahallamarket/services/favorites_store.dart';
+import 'post_edit_screen.dart';
 
 class ItemDetailScreen extends StatefulWidget {
-  final MockItem item;
+  final Item item;
   const ItemDetailScreen({super.key, required this.item});
 
   @override
@@ -12,212 +13,142 @@ class ItemDetailScreen extends StatefulWidget {
 }
 
 class _ItemDetailScreenState extends State<ItemDetailScreen> {
-  final TextEditingController msgCtrl =
-      TextEditingController(text: '안녕하세요. 관심 있어서 문의드려요.');
+  final _msgCtrl = TextEditingController();
+
+  @override
+  void dispose() {
+    _msgCtrl.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     final item = widget.item;
+    final isMine = item.ownerId == 'me';
+    final fav = favoritesStore.isFavorite(item.id);
 
     return Scaffold(
       appBar: AppBar(
-        leading: const BackButton(),
+        title: Text(item.title),
         actions: [
           IconButton(
-            icon: const Icon(Icons.ios_share),
-            onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Share (mock)')),
+            onPressed: () async {
+              final nowFav = favoritesStore.toggle(item.id);
+              await Repositories.items.like(item.id, nowFav);
+              if (!mounted) return;
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text(nowFav ? 'Added to favorites' : 'Removed from favorites')),
+              );
+              setState((){});
+            },
+            icon: Icon(fav ? Icons.favorite : Icons.favorite_border),
+          ),
+          if (isMine)
+            IconButton(
+              onPressed: () async {
+                final updated = await Navigator.push<Item?>(
+                  context,
+                  MaterialPageRoute(builder: (_) => PostEditScreen(existing: item)),
+                );
+                if (updated != null && mounted) {
+                  setState(() { widget.item == updated; });
+                }
+              },
+              icon: const Icon(Icons.edit),
+              tooltip: 'Edit',
             ),
-          ),
-          const SizedBox(width: 4),
-          PopupMenuButton<int>(
-            itemBuilder: (_) => const [
-              PopupMenuItem(value: 1, child: Text('Report (mock)')),
-            ],
-          ),
         ],
       ),
       body: ListView(
+        padding: const EdgeInsets.all(16),
         children: [
-          // Hero image / placeholder
           AspectRatio(
-            aspectRatio: 16 / 10,
+            aspectRatio: 16/9,
             child: Container(
-              color: Colors.black12,
+              decoration: BoxDecoration(
+                color: Colors.grey.shade300,
+                borderRadius: BorderRadius.circular(12),
+                image: item.imageUrl != null
+                    ? DecorationImage(image: NetworkImage(item.imageUrl!), fit: BoxFit.cover)
+                    : null,
+              ),
               child: item.imageUrl == null
-                  ? const Center(
-                      child: Icon(Icons.image, size: 64, color: Colors.white70),
-                    )
-                  : Image.network(item.imageUrl!, fit: BoxFit.cover),
+                  ? const Center(child: Icon(Icons.image, size: 64, color: Colors.white70))
+                  : null,
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    const CircleAvatar(child: Icon(Icons.person)),
-                    const SizedBox(width: 8),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text('으르렁왈왈',
-                            style: TextStyle(fontWeight: FontWeight.w600)),
-                        Text(item.neighborhood,
-                            style: Theme.of(context).textTheme.bodySmall),
-                      ],
-                    ),
-                    const Spacer(),
-                    Row(
-                      children: [
-                        Text('68,2°C',
-                            style: TextStyle(
-                                color: Colors.orange.shade700,
-                                fontWeight: FontWeight.w700)),
-                        const SizedBox(width: 4),
-                        const Text('Manner Meter',
-                            style:
-                                TextStyle(decoration: TextDecoration.underline)),
-                      ],
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                Text(item.title,
-                    style: Theme.of(context)
-                        .textTheme
-                        .titleLarge
-                        ?.copyWith(fontWeight: FontWeight.w700)),
-                const SizedBox(height: 8),
-                Text(money(item.price),
-                    style: Theme.of(context)
-                        .textTheme
-                        .titleLarge
-                        ?.copyWith(fontWeight: FontWeight.w800)),
-                const SizedBox(height: 12),
-                Text(
-                  'Electronics & Appliances · Boosted ${timeAgo(item.postedAt)} ago',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-                const SizedBox(height: 12),
-                const Text(
-                  '모의 설명 텍스트입니다. 실제 백엔드 연결 시 Firestore에서 불러옵니다.',
-                ),
-                const SizedBox(height: 16),
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('Where to meet'),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () => ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Map (mock)')),
-                  ),
-                ),
-              ],
-            ),
+          const SizedBox(height: 16),
+          Text(item.title, style: Theme.of(context).textTheme.headlineSmall),
+          const SizedBox(height: 8),
+          Text(money(item.price), style: Theme.of(context).textTheme.titleLarge!.copyWith(color: Colors.orange)),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              const Icon(Icons.place_outlined, size: 18),
+              const SizedBox(width: 4),
+              Text(item.neighborhoodName),
+              const SizedBox(width: 12),
+              const Icon(Icons.schedule, size: 18),
+              const SizedBox(width: 4),
+              Text('${timeAgo(item.createdAt)} ago'),
+            ],
+          ),
+          const SizedBox(height: 16),
+          ListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Seller'),
+            subtitle: Text(item.ownerId),
+            trailing: const Icon(Icons.chevron_right),
           ),
         ],
       ),
       bottomNavigationBar: SafeArea(
+        top: false,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
           child: Row(
             children: [
-              // Favorite button
-              IconButton(
-                icon: Icon(
-                  mockState.isFavorite(item.id)
-                      ? Icons.favorite
-                      : Icons.favorite_border,
-                  color: mockState.isFavorite(item.id)
-                      ? Colors.orange
-                      : null,
-                ),
-                onPressed: () async {
-                  final nowFav = mockState.toggleFavorite(item.id);
-                  if (mounted) setState(() {});
-                  if (nowFav) {
-                    await showDialog<void>(
-                      context: context,
-                      builder: (_) => AlertDialog(
-                        content: const Text(
-                            "Added to favorites! We'll notify you whenever the price drops."),
-                        actions: [
-                          TextButton(
-                              onPressed: () => Navigator.pop(context),
-                              child: const Text('OK'))
-                        ],
-                      ),
-                    );
-                  }
-                },
-              ),
-
-              const SizedBox(width: 8),
-
-              // Message box
               Expanded(
                 child: TextField(
-                  controller: msgCtrl,
+                  controller: _msgCtrl,
                   decoration: const InputDecoration(
-                    hintText: '안녕하세요. 관심 있어서 문의드려요.',
-                    filled: true,
-                    border: OutlineInputBorder(
-                      borderSide: BorderSide.none,
-                      borderRadius: BorderRadius.all(Radius.circular(24)),
-                    ),
-                    contentPadding:
-                        EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    hintText: 'Write a message…',
+                    border: OutlineInputBorder(),
+                    isDense: true,
                   ),
                 ),
               ),
-
               const SizedBox(width: 8),
-
-              // Send button (gates on verification)
               FilledButton(
                 onPressed: () async {
-                  if (!mockState.neighborhoodVerified) {
-                    final ok = await showDialog<bool>(
-                      context: context,
-                      builder: (_) => AlertDialog(
-                        title: const Text('Verify'),
-                        content: const Text(
-                            'To chat, verify neighborhood in 공동.'),
-                        actions: [
-                          TextButton(
-                              onPressed: () => Navigator.pop(context, false),
-                              child: const Text('Cancel')),
-                          FilledButton(
-                              onPressed: () => Navigator.pop(context, true),
-                              child: const Text('Verify')),
-                        ],
-                      ),
-                    );
-                    if (ok == true && mounted) {
-                      await Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const VerificationScreen(),
-                        ),
-                      );
-                    }
-                    return;
-                  }
-
+                  final text = _msgCtrl.text.trim();
+                  if (text.isEmpty) return;
+                  _msgCtrl.clear();
+                  // Mock-send
+                  if (!mounted) return;
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Sent: ${msgCtrl.text.trim()} (mock)'),
-                    ),
+                    SnackBar(content: Text('Sent: $text (mock)')),
                   );
                 },
                 child: const Text('Send'),
-              ),
+              )
             ],
           ),
         ),
       ),
     );
   }
+}
+
+String money(num v) => '${v.toStringAsFixed(0)} soʻm';
+String timeAgo(DateTime dt) {
+  final s = DateTime.now().difference(dt).inSeconds;
+  if (s < 60) return '${s}s';
+  final m = s ~/ 60;
+  if (m < 60) return '${m}m';
+  final h = m ~/ 60;
+  if (h < 24) return '${h}h';
+  final d = h ~/ 24;
+  return '${d}d';
 }

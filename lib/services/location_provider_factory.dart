@@ -1,9 +1,13 @@
-import 'location_provider.dart';
-import 'location_provider_real.dart';
-import 'location_provider_fake.dart';
+import 'package:mahallamarket/services/location_provider.dart';
+import 'package:mahallamarket/services/location_provider_fake.dart';
+import 'package:mahallamarket/services/location_provider_real.dart';
 
-const bool kUseFakeLocation =
-    bool.fromEnvironment('USE_FAKE_LOCATION', defaultValue: false);
+final bool _useFake =
+  const String.fromEnvironment('USE_FAKE_LOCATION', defaultValue: 'false') == 'true';
 
-LocationProvider getLocationProvider() =>
-    kUseFakeLocation ? FakeLocationProvider() : RealLocationProvider();
+LocationProvider? _cached;
+
+LocationProvider getLocationProvider() {
+  _cached ??= _useFake ? LocationProviderFake() : LocationProviderReal();
+  return _cached!;
+}

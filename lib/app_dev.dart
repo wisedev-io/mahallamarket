@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:mahallamarket/screens/home_feed_screen.dart';
-import 'package:mahallamarket/screens/profile_dev_screen.dart';
+import 'package:mahallamarket/screens/chat_list_screen.dart';
+import 'package:mahallamarket/screens/profile_hub_screen.dart';
 
 class AppDev extends StatefulWidget {
   const AppDev({super.key});
@@ -10,19 +11,15 @@ class AppDev extends StatefulWidget {
 
 class _AppDevState extends State<AppDev> {
   int _tab = 0;
+  final _pages = const [HomeFeedScreen(), ChatListScreen(), ProfileHubScreen()];
 
   @override
   Widget build(BuildContext context) {
-    final pages = const [
-      HomeFeedScreen(),
-      _ChatsDev(),
-      ProfileDevScreen(),
-    ];
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       theme: ThemeData(useMaterial3: true, colorSchemeSeed: Colors.orange),
       home: Scaffold(
-        body: pages[_tab],
+        body: _pages[_tab],
         bottomNavigationBar: NavigationBar(
           selectedIndex: _tab,
           onDestinationSelected: (i) => setState(() => _tab = i),
@@ -35,13 +32,4 @@ class _AppDevState extends State<AppDev> {
       ),
     );
   }
-}
-
-class _ChatsDev extends StatelessWidget {
-  const _ChatsDev({super.key});
-  @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Chats')),
-    body: Center(child: Text('No chats')),
-  );
 }

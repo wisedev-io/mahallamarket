@@ -1,4 +1,6 @@
-/// Minimal location interface used by the app.
+import 'package:mahallamarket/core/latlng.dart';
+
 abstract class LocationProvider {
-  Future<({double lat, double lng})> getCurrentPosition();
+  /// Return current location or null if not available/denied.
+  Future<LatLng?> get();
 }

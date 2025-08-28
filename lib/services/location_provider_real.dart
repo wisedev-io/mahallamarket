@@ -1,16 +1,29 @@
 import 'package:geolocator/geolocator.dart';
-import 'location_provider.dart';
+import 'package:mahallamarket/core/latlng.dart';
+import 'package:mahallamarket/services/location_provider.dart';
 
-class RealLocationProvider implements LocationProvider {
+class LocationProviderReal implements LocationProvider {
   @override
-  Future<({double lat, double lng})> getCurrentPosition() async {
-    LocationPermission perm = await Geolocator.checkPermission();
-    if (perm == LocationPermission.denied) {
-      perm = await Geolocator.requestPermission();
+  Future<LatLng?> get() async {
+    try {
+      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        return null;
+      }
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied) {
+          return null;
+        }
+      }
+      if (permission == LocationPermission.deniedForever) {
+        return null;
+      }
+      final pos = await Geolocator.getCurrentPosition();
+      return LatLng(pos.latitude, pos.longitude);
+    } catch (_) {
+      return null;
     }
-    final pos = await Geolocator.getCurrentPosition(
-      desiredAccuracy: LocationAccuracy.high,
-    );
-    return (lat: pos.latitude, lng: pos.longitude);
   }
 }

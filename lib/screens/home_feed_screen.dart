@@ -3,8 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:mahallamarket/core/latlng.dart';
 import 'package:mahallamarket/di/repositories.dart';
 import 'package:mahallamarket/domain/models/item.dart';
-import 'package:mahallamarket/services/mock_state.dart';
-import 'package:mahallamarket/services/mock_data.dart' show MockItem;
+import 'package:mahallamarket/services/location_provider_factory.dart';
 import 'item_detail_screen.dart';
 
 class HomeFeedScreen extends StatefulWidget {
@@ -14,16 +13,36 @@ class HomeFeedScreen extends StatefulWidget {
 }
 
 class _HomeFeedScreenState extends State<HomeFeedScreen> {
-  final TextEditingController _searchCtrl = TextEditingController();
+  final _searchCtrl = TextEditingController();
   StreamSubscription? _sub;
-  List<Item> _items = const [];
+  List<Item> _items = [];
   bool _loading = true;
-  String _query = '';
 
   @override
   void initState() {
     super.initState();
-    _listen();
+    _wire();
+  }
+
+  Future<void> _wire() async {
+    final fake = const String.fromEnvironment('USE_FAKE_LOCATION', defaultValue: 'false') == 'true';
+    LatLng center;
+    if (fake) {
+      final lat = double.tryParse(const String.fromEnvironment('FAKE_LAT', defaultValue: '41.3111')) ?? 41.3111;
+      final lng = double.tryParse(const String.fromEnvironment('FAKE_LNG', defaultValue: '69.2797')) ?? 69.2797;
+      center = LatLng(lat, lng);
+    } else {
+      final pos = await getLocationProvider().get() ??
+          Repositories.tashkent;
+      center = LatLng(pos.lat, pos.lng);
+    }
+
+    _sub?.cancel();
+    _sub = Repositories.items
+        .watchFeed(center: center, radiusKm: 20, query: null)
+        .listen((data) {
+          setState(() { _items = data; _loading = false; });
+        });
   }
 
   @override
@@ -33,116 +52,87 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
     super.dispose();
   }
 
-  void _listen() async {
-    setState(() => _loading = true);
-
-    // Simple, reliable fallback center (Tashkent) so we don't depend on platform APIs here.
-    // You can replace with real location later.
-    final pos = const LatLng(41.3111, 69.2797);
-    final radiusKm = mockState.neighborhoodRadiusKm;
-
+  void _onSearch(String q) {
     _sub?.cancel();
     _sub = Repositories.items
-        .watchFeed(center: pos, radiusKm: radiusKm, query: _query)
-        .listen((data) {
-      setState(() {
-        _items = data;
-        _loading = false;
-      });
-    });
+        .watchFeed(center: Repositories.tashkent, radiusKm: 20, query: q)
+        .listen((data) => setState(() => _items = data));
   }
 
-  void _onSearchChanged(String v) {
-    _query = v.trim();
-    _listen();
-  }
-
-  Future<void> _addMockItem() async {
-    final now = DateTime.now().toIso8601String().substring(11, 19);
+  Future<void> _addMock() async {
     await Repositories.items.add(Item(
-      id: 'tmp',
+      id: 'draft',
       ownerId: 'me',
-      title: 'New post $now',
-      price: 10000,
+      title: 'New post',
+      price: 123000,
       neighborhoodId: 'mock-hood',
-      neighborhoodName: mockState.neighborhoodName,
+      neighborhoodName: 'Chilonzor',
       createdAt: DateTime.now(),
       imageUrl: null,
       likesCount: 0,
       chatsCount: 0,
     ));
-    if (mounted) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('Added mock post')));
-    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    return Scaffold(
-      appBar: AppBar(
-        title: Row(
+    final topBar = SafeArea(
+      bottom: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+        child: Row(
           children: [
-            const Icon(Icons.place, size: 18),
+            const Icon(Icons.place_outlined, size: 20),
             const SizedBox(width: 6),
-            Text(mockState.neighborhoodName,
-                style: const TextStyle(fontWeight: FontWeight.w600)),
+            const Text('Chilonzor', style: TextStyle(fontWeight: FontWeight.w600)),
+            const Spacer(),
+            IconButton(
+              onPressed: () => _onSearch(_searchCtrl.text.trim()),
+              icon: const Icon(Icons.search),
+            ),
           ],
         ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.search),
-            onPressed: () async {
-              await showModalBottomSheet(
-                context: context,
-                useSafeArea: true,
-                isScrollControlled: true,
-                builder: (ctx) => Padding(
-                  padding: EdgeInsets.only(
-                    left: 16,
-                    right: 16,
-                    top: 16,
-                    bottom: 16 + MediaQuery.of(ctx).viewInsets.bottom,
-                  ),
-                  child: TextField(
-                    controller: _searchCtrl,
-                    autofocus: true,
-                    decoration: const InputDecoration(
-                      hintText: 'Search items…',
-                      prefixIcon: Icon(Icons.search),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.all(Radius.circular(16)),
-                      ),
-                    ),
-                    onSubmitted: (v) {
-                      Navigator.pop(ctx);
-                      _onSearchChanged(v);
-                    },
-                  ),
-                ),
+      ),
+    );
+
+    final search = Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: TextField(
+        controller: _searchCtrl,
+        onSubmitted: _onSearch,
+        decoration: const InputDecoration(
+          hintText: 'Search items…',
+          prefixIcon: Icon(Icons.search),
+          border: OutlineInputBorder(),
+          isDense: true,
+        ),
+      ),
+    );
+
+    final body = _loading
+        ? const Center(child: CircularProgressIndicator())
+        : _items.isEmpty
+            ? const Center(child: Text('No posts in your neighborhood yet'))
+            : ListView.separated(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
+                itemCount: _items.length,
+                separatorBuilder: (_, __) => const SizedBox(height: 8),
+                itemBuilder: (ctx, i) => _FeedTile(item: _items[i]),
               );
-            },
-          ),
+
+    return Scaffold(
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          topBar,
+          search,
+          const SizedBox(height: 8),
+          Expanded(child: body),
         ],
       ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : _items.isEmpty
-              ? const Center(child: Text('No items found'))
-              : ListView.separated(
-                  padding: const EdgeInsets.fromLTRB(12, 12, 12, 96),
-                  itemCount: _items.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 8),
-                  itemBuilder: (ctx, i) {
-                    final it = _items[i];
-                    return _FeedTile(item: it);
-                  },
-                ),
       floatingActionButton: FloatingActionButton(
-        onPressed: _addMockItem,
-        backgroundColor: cs.primary,
-        child: const Icon(Icons.add, color: Colors.white),
+        onPressed: _addMock,
+        child: const Icon(Icons.add),
       ),
     );
   }
@@ -154,70 +144,48 @@ class _FeedTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    return InkWell(
-      onTap: () => Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => ItemDetailScreen(
-            item: MockItem(
-              id: item.id,
-              title: item.title,
-              neighborhood: item.neighborhoodName,
-              postedAt: item.createdAt,
-              price: item.price,
-              imageUrl: item.imageUrl,
-              likes: item.likesCount,
-              chats: item.chatsCount,
-            ),
-          ),
+    return Material(
+      color: Theme.of(context).colorScheme.surface,
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => ItemDetailScreen(item: item)),
         ),
-      ),
-      child: Container(
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surface,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: cs.outlineVariant),
-        ),
-        padding: const EdgeInsets.all(10),
-        child: Row(
-          children: [
-            AspectRatio(
-              aspectRatio: 1,
-              child: ClipRRect(
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            children: [
+              ClipRRect(
                 borderRadius: BorderRadius.circular(8),
-                child: item.imageUrl == null
-                    ? Container(
-                        color: cs.surfaceContainerHighest,
-                        child: const Icon(Icons.image),
-                      )
-                    : Image.network(item.imageUrl!, fit: BoxFit.cover),
+                child: SizedBox(
+                  width: 90, height: 90,
+                  child: item.imageUrl == null
+                      ? Container(color: Colors.grey.shade300, child: const Icon(Icons.image))
+                      : Image.network(item.imageUrl!, fit: BoxFit.cover),
+                ),
               ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: DefaultTextStyle(
-                style: Theme.of(context).textTheme.bodyMedium!,
+              const SizedBox(width: 12),
+              Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(item.title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontWeight: FontWeight.w600)),
-                    const SizedBox(height: 2),
-                    Text('${item.neighborhoodName} · ${_timeAgo(item.createdAt)}'),
+                    Text(item.title, maxLines: 1, overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontWeight: FontWeight.w600)),
                     const SizedBox(height: 4),
-                    Text(_money(item.price),
-                        style: const TextStyle(fontWeight: FontWeight.w800)),
+                    Text('${item.neighborhoodName} · ${timeAgo(item.createdAt)} ago',
+                      style: TextStyle(color: Theme.of(context).hintColor)),
+                    const SizedBox(height: 6),
+                    Text(money(item.price), style: const TextStyle(color: Colors.orange, fontWeight: FontWeight.w600)),
                     const SizedBox(height: 6),
                     Row(
                       children: [
-                        const Icon(Icons.favorite, size: 16),
+                        const Icon(Icons.favorite_border, size: 16),
                         const SizedBox(width: 4),
                         Text('${item.likesCount}'),
                         const SizedBox(width: 12),
-                        const Icon(Icons.chat_bubble, size: 16),
+                        const Icon(Icons.chat_bubble_outline, size: 16),
                         const SizedBox(width: 4),
                         Text('${item.chatsCount}'),
                       ],
@@ -225,22 +193,22 @@ class _FeedTile extends StatelessWidget {
                   ],
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
   }
+}
 
-  static String _money(num v) => '${v.toStringAsFixed(0)} soʻm';
-  static String _timeAgo(DateTime dt) {
-    final s = DateTime.now().difference(dt).inSeconds;
-    if (s < 60) return '${s}s';
-    final m = s ~/ 60;
-    if (m < 60) return '${m}m';
-    final h = m ~/ 60;
-    if (h < 24) return '${h}h';
-    final d = h ~/ 24;
-    return '${d}d';
-  }
+String money(num v) => '${v.toStringAsFixed(0)} soʻm';
+String timeAgo(DateTime dt) {
+  final s = DateTime.now().difference(dt).inSeconds;
+  if (s < 60) return '${s}s';
+  final m = s ~/ 60;
+  if (m < 60) return '${m}m';
+  final h = m ~/ 60;
+  if (h < 24) return '${h}h';
+  final d = h ~/ 24;
+  return '${d}d';
 }
